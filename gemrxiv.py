@@ -36,7 +36,7 @@ preliminary_results = http_json_as_dict('https://api.figshare.com/v2/articles?'
 
 # These results will not be considered (last six months)
 cut_results = http_json_as_dict('https://api.figshare.com/v2/articles?'
-                                     'group=13668&page_size=1000&published_since=2018-07-01'
+                                     'group=13668&page_size=1000&published_since=2019-12-01'
                                      '&order=published_date&order_direction=desc')
 
 # Convert to list of just ids
@@ -70,5 +70,5 @@ print("Cleaned data has %d entries." % (len(results)))
 results = sorted(results, key=lambda entry: entry['downloads_per_day'])
 
 print("\n")
-print(tabulate.tabulate(results))
+print(tabulate.tabulate(results).encode("ascii", "replace"))
 
