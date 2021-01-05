@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 # gemRxiv
 # Copyright (C) 2018 by Sven Kochmann
@@ -19,13 +19,14 @@
 # This program  extracts the  hidden gems from  chemRxiv to brag about
 # them on Twitter and the like.
 
-import urllib2
-import json
 import datetime
+import json
 import tabulate
+import urllib.request
+
 
 def http_json_as_dict(url):
-    return json.load(urllib2.urlopen(url))
+    return json.load(urllib.request.urlopen(url))
 
 
 # According to Figshare API page_size=1000 is the maximum and item_type = 12 are pre-prints;
