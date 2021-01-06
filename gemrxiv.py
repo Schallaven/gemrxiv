@@ -81,16 +81,24 @@ print("%d preprints for ChemRxiv in total, %d will be cut." %
 
 # Create a list of dictionaries (article_id, title, views, downloads, publishing date, days since publishing,
 # downloads/days) with only the papers that are left; ask statistics for views and downloads
-results = [{'id': int(entry['id']),
-            'title': entry['title'],
-            'views': int(http_json_as_dict('https://stats.figshare.com/total/views/article/' +
-                                            str(entry['id']))['totals']),
-            'downloads': int(http_json_as_dict('https://stats.figshare.com/total/downloads/article/' +
-                                            str(entry['id']))['totals']),
-            'date': entry['published_date'][0:10],
-            'days_online': 0,
-            'downloads_per_day': 0.0}
-           for entry in preliminary_results if entry['id'] not in cut_results]
+results = []
+for index, entry in enumerate(preliminary_results):
+    print("Downloading data for preprint %d of %d" % (index + 1, len(preliminary_results)), end='\r')
+
+    # Add entry if id is not in cut_results!
+    if entry['id'] not in cut_results:
+        data = {'id': int(entry['id']),
+                'title': entry['title'],
+                'views': int(http_json_as_dict('https://stats.figshare.com/total/views/article/' +
+                                               str(entry['id']))['totals']),
+                'downloads': int(http_json_as_dict('https://stats.figshare.com/total/downloads/article/' +
+                                               str(entry['id']))['totals']),
+                'date': entry['published_date'][0:10],
+                'days_online': 0,
+                'downloads_per_day': 0.0}
+        results.append(data)
+
+print("")
 
 
 for index, entry in enumerate(results):
@@ -107,5 +115,5 @@ print("Cleaned data has %d entries." % (len(results)))
 results = sorted(results, key=lambda entry: entry['downloads_per_day'])
 
 print("")
-print(tabulate.tabulate(results).encode("ascii", "replace"))
+print(tabulate.tabulate(results)) #.encode("ascii", "replace"))
 
