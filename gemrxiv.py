@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # gemRxiv
-# Copyright (C) 2020 by Sven Kochmann
+# Copyright (C) 2024 by Sven Kochmann
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -19,6 +19,9 @@
 
 # This program  extracts the  hidden gems from  chemRxiv to brag about
 # them on Twitter and the like.
+#
+# Feb 2024: ChemRxiv has its own API now:
+# https://chemrxiv.org/engage/chemrxiv/public-api/documentation
 
 import argparse
 import datetime
@@ -31,53 +34,33 @@ parser = argparse.ArgumentParser(
 			description = 'gemrxiv extracts the  hidden gems from  chemRxiv to brag about them on Twitter and the like.')
 
 parser.add_argument('-v', '--version', help = 'prints version information', action = 'version', version = 'gemRxiv! 1.1 by Sven Kochmann')
-parser.add_argument('-e', '--entries', metavar = 'E', help = 'Number of entries to load, maximum is 1000 (default: 1000)', type = int, default = 1000)
-parser.add_argument('-d', '--days', metavar = 'D', help = 'Entries in the last D days will not be considered (default: 180)', type = int, default = 180)
-parser.add_argument('-n', '--nocut', help = 'Do not cut entries, i.e. consider all entries.', action = 'store_true', default = False)
+parser.add_argument('-e', '--entries', metavar = 'E', help = 'Number of entries to load, maximum is 50 (default: 50)', type = int, default = 50)
+parser.add_argument('-f', '--finish', metavar = 'F', help = 'Only considers entries BEFORE this finishing date (default: today). Should be YYYY-MM-DD format', type = str, default=datetime.datetime.today().strftime('%Y-%m-%d'))
+parser.add_argument('-d', '--days', metavar = 'D', help = 'Entries in the D days before the finishing date will not be considered (default: 180)', type = int, default = 180)
 
 args = vars(parser.parse_args())
 
-# Calculate the date 
-date_cutoff = datetime.datetime.today() - datetime.timedelta(days=args['days'])
+# Calculate the starting and ending dates
+date_end = datetime.date.fromisoformat(args['finish'])
+date_start = date_end - datetime.timedelta(days=args['days'])
 
-# According to Figshare API page_size=1000 is the maximum
-if not 0 < args['entries'] < 1001:
-    args['entries'] = 100
+# According to chemRxiv API 50 items are the maximum
+if not 0 < args['entries'] < 51:
+    args['entries'] = 50
 
-# Setup the two url, one for all entries and one for the entries to exclude (Figshare
-# does not have a direct function to exclude entries; or at least I did not find one)
-# According to Figshare API item_type = 12 are pre-prints and all chemRxiv pre-prints 
-# have group = 13668
-url1 = 'https://api.figshare.com/v2/articles?group=13668&page_size=' + str(args['entries']) + '&order=published_date&order_direction=desc'
-url2 = url1 + '&published_since=' + date_cutoff.strftime('%Y-%m-%d')
+# Setup the url (chemRxiv API allows exclusions!)
+url1 = 'https://chemrxiv.org/engage/chemrxiv/public-api/v1/items?limit=' + str(args['entries']) + '&sort=VIEWS_COUNT_ASC&searchDateFrom=' + date_start.strftime('%Y-%m-%d') + '&searchDateTo=' + date_end.strftime('%Y-%m-%d')
 
 # Opens an url an returns its contents as JSON-dictionary
-def http_json_as_dict(url):
-    return json.load(urllib.request.urlopen(url))
+def http_json_as_dict(urltogo):
+    req = urllib.request.Request(url=urltogo, headers={'User-Agent': 'Mozilla/5.0'})
+    return json.load(urllib.request.urlopen(req))
 
 # Get all results
+print('Sending request \'' + url1 + '\'...', flush=True)
 print('Downloading preprints...', end='', flush=True)
-preliminary_results = http_json_as_dict(url1)
+preliminary_results = http_json_as_dict(url1)["itemHits"]
 print('%d loaded.' % len(preliminary_results), flush=True)
-
-# These results will not be considered (last six months)
-cut_results = []
-if not args['nocut']:
-    print('Downloading recent preprints...', end='', flush=True)
-    cut_results = http_json_as_dict(url2)
-    print('%d loaded.' % len(cut_results), flush=True)
-    
-    # Convert to list of just ids
-    cut_results = [int(entry['id']) for entry in cut_results]
-
-
-# If all results would be cut, there is no point to show more
-if len(cut_results) == len(preliminary_results):
-    print("All preprints would be cut. Exiting.")
-    exit(0)
-
-print("%d preprints for ChemRxiv in total, %d will be cut." %
-      (len(preliminary_results), len(cut_results)))
 
 # Create a list of dictionaries (article_id, title, views, downloads, publishing date, days since publishing,
 # downloads/days) with only the papers that are left; ask statistics for views and downloads
@@ -85,18 +68,19 @@ results = []
 for index, entry in enumerate(preliminary_results):
     print("Downloading data for preprint %d of %d" % (index + 1, len(preliminary_results)), end='\r')
 
-    # Add entry if id is not in cut_results!
-    if entry['id'] not in cut_results:
-        data = {'id': int(entry['id']),
-                'title': entry['title'],
-                'views': int(http_json_as_dict('https://stats.figshare.com/total/views/article/' +
-                                               str(entry['id']))['totals']),
-                'downloads': int(http_json_as_dict('https://stats.figshare.com/total/downloads/article/' +
-                                               str(entry['id']))['totals']),
-                'date': entry['published_date'][0:10],
-                'days_online': 0,
-                'downloads_per_day': 0.0}
-        results.append(data)
+    # Add entry 
+    data = {'id': entry['item']['id'],
+            'title': entry['item']['title'],
+            'views': entry['item']['metrics'][0]['value'],
+            'citations': entry['item']['metrics'][1]['value'], 
+            'downloads': entry['item']['metrics'][2]['value'], 
+            'date': entry['item']['publishedDate'][0:10],
+            'days_online': 0,
+            'downloads_per_day': 0.0,
+            'url': 'https://chemrxiv.org/engage/chemrxiv/article-details/' + entry['item']['id']}
+    results.append(data)
+
+    pass
 
 print("")
 
@@ -108,12 +92,11 @@ for index, entry in enumerate(results):
     if days_online > 0:
         results[index]['downloads_per_day'] = float(float(entry['downloads'])/float(days_online))
 
-
-print("Cleaned data has %d entries." % (len(results)))
-
 # Sort by downloads
 results = sorted(results, key=lambda entry: entry['downloads_per_day'])
 
 print("")
 print(tabulate.tabulate(results)) #.encode("ascii", "replace"))
+
+
 
